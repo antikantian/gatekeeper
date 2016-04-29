@@ -6,7 +6,8 @@ import redis.RedisClient
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
-import co.quine.gatekeeper.redisHost
+
+import co.quine.gatekeeper.config.Config.BackendConfig
 
 trait RedisConnector {
 
@@ -15,7 +16,7 @@ trait RedisConnector {
 
   implicit private val timeout = Timeout(60.seconds)
 
-  val rc = new RedisClient(host = redisHost)
+  val rc = new RedisClient(host = BackendConfig.redisHost)
 
   val pong = rc.ping
 

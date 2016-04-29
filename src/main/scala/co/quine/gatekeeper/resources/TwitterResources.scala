@@ -1,6 +1,10 @@
 package co.quine.gatekeeper.resources
 
+import scala.collection.mutable.{Set => mSet}
+
 object TwitterResources {
+
+  case class TwitterTokens(consumer: ConsumerToken, bearer: BearerToken, tokens: mSet[AccessToken])
 
   sealed trait Context
   case object AppContext extends Context

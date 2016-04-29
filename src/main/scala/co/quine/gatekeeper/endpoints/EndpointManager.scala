@@ -2,18 +2,18 @@ package co.quine.gatekeeper.endpoints
 
 import akka.actor._
 import akka.util.Timeout
-import argonaut._
+import argonaut.Parse
 
 import scalaj.http._
-
 import scala.collection.mutable.{Set => mSet}
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-import co.quine.gatekeeper.{Gatekeeper, consumer_key, consumer_secret, version}
+import co.quine.gatekeeper.Gatekeeper
 import co.quine.gatekeeper.actors.RateLimitActor
+import co.quine.gatekeeper.config.Config._
 import co.quine.gatekeeper.connectors.RedisConnector
-import co.quine.gatekeeper.tokens.ResourceToken
+import co.quine.gatekeeper.tokens._
 import co.quine.gatekeeper.resources.TwitterResources._
 
 trait EndpointManager extends RedisConnector {
@@ -22,9 +22,9 @@ trait EndpointManager extends RedisConnector {
   implicit val system: ActorSystem
   implicit val gatekeeper: Gatekeeper
 
-  implicit val timeout: Timeout = Timeout(60.seconds)
+  implicit val timeout = Timeout(60.seconds)
 
-  implicit val consumerToken: ConsumerToken = ConsumerToken(consumer_key, consumer_secret)
+  implicit val consumerToken: ConsumerToken = ConsumerToken(TwitterConfig.consumer_key, TwitterConfig.consumer_secret)
   implicit val bearerToken: BearerToken = parseBearerResponse(obtainBearer)
   implicit val accessTokens: mSet[AccessToken] = mSet.empty
 
@@ -37,6 +37,29 @@ trait EndpointManager extends RedisConnector {
   }
 
   Await.result(futureTokens, 30.seconds)
+
+  def obtainBearer: HttpResponse[String] = {
+    Http("https://api.twitter.com/oauth2/token")
+      .header("User-Agent", s"Gatekeeper v$version")
+      .auth(consumerToken.key, consumerToken.secret)
+      .header("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8")
+      .postForm(Seq(("grant_type", "client_credentials")))
+      .asString
+  }
+
+  def parseBearerResponse(r: HttpResponse[String]): BearerToken = {
+    val raw = Parse.parseWith(r.body, _.field("access_token").flatMap(_.string).getOrElse("Error"), msg => msg)
+    BearerToken(consumerToken, raw)
+  }
+
+  def invalidateBearer: HttpResponse[String] = {
+    Http("https://api.twitter.com/oauth2/invalidate_token")
+      .auth(consumerToken.key, consumerToken.secret)
+      .header("User-Agent", s"Gatekeeper v$version")
+      .header("Content-Type", "application/x-www-form-urlencoded")
+      .postForm(Seq(("access_token", bearerToken.token)))
+      .asString
+  }
 
   val endpointMap: Map[TwitterResource, Endpoint] = Map(
     UsersLookup -> new Endpoint(UsersLookup),
@@ -51,29 +74,6 @@ trait EndpointManager extends RedisConnector {
   )
 
   val rateLimitActor = system.actorOf(RateLimitActor.props(allResourceTokens, consumerToken), "rate-limit-updates")
-
-  def obtainBearer: HttpResponse[String] = {
-    Http("https://api.twitter.com/oauth2/token")
-      .header("User-Agent", s"Gatekeeper v$version")
-      .auth(consumer_key, consumer_secret)
-      .header("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8")
-      .postForm(Seq(("grant_type", "client_credentials")))
-      .asString
-  }
-
-  def parseBearerResponse(r: HttpResponse[String]): BearerToken = {
-    val raw = Parse.parseWith(r.body, _.field("access_token").flatMap(_.string).getOrElse("Error"), msg => msg)
-    BearerToken(consumerToken, raw)
-  }
-
-  def invalidateBearer: HttpResponse[String] = {
-    Http("https://api.twitter.com/oauth2/invalidate_token")
-      .auth(consumer_key, consumer_secret)
-      .header("User-Agent", s"Gatekeeper v$version")
-      .header("Content-Type", "application/x-www-form-urlencoded")
-      .postForm(Seq(("access_token", bearerToken.token)))
-      .asString
-  }
 
   def exchangeBearer(b: BearerToken) = endpointMap.values.foreach(e => e.exchangeBearer(bearerToken, b))
 

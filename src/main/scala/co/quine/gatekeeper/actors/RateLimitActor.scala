@@ -4,8 +4,11 @@ import akka.actor._
 import argonaut._, Argonaut._
 import scalaj.http._
 
+import scala.concurrent.duration._
+
+import co.quine.gatekeeper.config.Config.TwitterConfig._
 import co.quine.gatekeeper.resources.TwitterResources._
-import co.quine.gatekeeper.tokens.ResourceToken
+import co.quine.gatekeeper.tokens._
 
 object RateLimitActor {
   case class RateLimitStatus(rate_limit_context: RateLimitContext, resources: Resources)
@@ -97,8 +100,11 @@ object RateLimitActor {
 class RateLimitActor(tokens: Seq[ResourceToken], consumer: ConsumerToken) extends Actor with ActorLogging {
 
   import RateLimitActor._
+  import context.dispatcher
 
-  val rateLimitUri = "https://api.twitter.com/1.1/application/rate_limit_status.json"
+  val updateSchedule = context.system.scheduler.schedule(1.minute, 5.minutes, self, "update")
+
+  val rateLimitUri = s"$twitterScheme://$twitterHost/$twitterVersion/application/rate_limit_status.json"
 
   def rateLimitRequest(bearer: String): Option[RateLimitStatus] = {
     val request = Http(rateLimitUri).header("Authorization", s"Bearer $bearer").asString
@@ -115,10 +121,15 @@ class RateLimitActor(tokens: Seq[ResourceToken], consumer: ConsumerToken) extend
   def parseRateLimitResponse(r: HttpResponse[String]) = Parse.decodeOption[RateLimitStatus](r.body)
 
   def runUpdate(): Unit = {
-    val rateLimitUpdates: Seq[RateLimitStatus] = tokens.flatMap { t =>
+    log.info("Running ratelimit update")
+
+    var requestCount = 0
+    var updateCount = 0
+
+    val rateLimitUpdates: Iterable[RateLimitStatus] = tokens.groupBy(_.key).map(_._2.head).flatMap { t =>
       t.credential match {
-        case AccessToken(a, b) => rateLimitRequest(AccessToken(a, b))
-        case BearerToken(a, b) => rateLimitRequest(b)
+        case AccessToken(a, b) => requestCount += 1; rateLimitRequest(AccessToken(a, b))
+        case BearerToken(a, b) => requestCount += 1; rateLimitRequest(b)
       }
     }
 
@@ -126,11 +137,15 @@ class RateLimitActor(tokens: Seq[ResourceToken], consumer: ConsumerToken) extend
       tokens filter { resource =>
         resource.key == update.rate_limit_context.access_token } foreach { r =>
           r.update(update)
+          updateCount += 1
       }
     }
+    log.info(s"Ratelimit update complete: $requestCount requests, $updateCount updates")
   }
 
-  override def preStart() = log.info("Ratelimit actor: up")
+  override def preStart() = log.info(s"${self.path.name}: up")
+
+  override def postStop() = updateSchedule.cancel()
 
   def receive = {
     case "update" => runUpdate()
