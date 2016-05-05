@@ -16,7 +16,7 @@ object Main extends App {
 
   val gate = new Gatekeeper()
 
-  system.actorOf(ServerActor.props(new URI(Config.listenAddress)), name = "gatekeeper-server")
+  system.actorOf(ServerActor.props(new URI(Config.listenAddress), gate), name = "gatekeeper-server")
 
   Await.result(system.whenTerminated, Duration.Inf)
 

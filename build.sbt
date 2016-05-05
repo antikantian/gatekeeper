@@ -35,7 +35,6 @@ lazy val versions = new {
 }
 
 libraryDependencies ++= Seq(
-  "co.quine"                    %% "twitterclient" % "0.0.5",
   "com.github.nscala-time"      %% "nscala-time" % versions.nscalatime,
   "com.github.etaty"            %% "rediscala" % versions.redis,
   "com.typesafe"                 % "config" % versions.config,
