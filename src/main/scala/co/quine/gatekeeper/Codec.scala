@@ -1,5 +1,8 @@
 package co.quine.gatekeeper
 
+import akka.util.ByteString
+import argonaut._, Argonaut._
+import redis._
 import java.nio.charset.Charset
 
 object Codec {
@@ -13,6 +16,8 @@ object Codec {
   val UPDATE = '>'
 
   val UUID = '#'
+
+  val ERROR = '-'
 
   val UNAVAILABLE = '*'
   val CONSUMERTOKEN = '&'
@@ -52,6 +57,7 @@ object Codec {
   }
 
   case class TokenResponse(uuid: String, response: Token) extends Response
+  case class ErrorResponse(uuid: String, response: Respondable) extends Response
 
   sealed trait Requestable {
     val serialized: String
@@ -66,6 +72,15 @@ object Codec {
     val serialized: String
   }
 
+  sealed trait Error extends Respondable {
+    val typeId = '-'
+    val serialized: String
+  }
+
+  case object ResourceDown extends Error {
+    val serialized = typeId + "RESOURCEDOWN"
+  }
+
   sealed trait Token extends Respondable {
     val typeId: Char
     val serialized: String
@@ -76,14 +91,34 @@ object Codec {
     val serialized = typeId + s"$key:$secret"
   }
 
+  implicit val accessTokenByteStringFormatter = new ByteStringFormatter[AccessToken] {
+    def serialize(data: AccessToken): ByteString = ByteString(s"${data.key}:${data.secret}")
+    def deserialize(bs: ByteString): AccessToken = {
+      bs.utf8String.split(":") match { case Array(a, b) => AccessToken(a, b) }
+    }
+  }
+
   case class ConsumerToken(key: String, secret: String) extends Token with Respondable {
     val typeId = CONSUMERTOKEN
     val serialized = typeId + s"$key:$secret"
   }
 
+  implicit val consumerTokenByteStringFormatter = new ByteStringFormatter[ConsumerToken] {
+    def serialize(data: ConsumerToken): ByteString = ByteString(s"${data.key}:${data.secret}")
+    def deserialize(bs: ByteString): ConsumerToken = {
+      bs.utf8String.split(":") match { case Array(a, b) => ConsumerToken(a, b) }
+    }
+  }
+
   case class BearerToken(token: String) extends Token with Respondable {
     val typeId = BEARERTOKEN
     val serialized = typeId + token
+  }
+
+  implicit def BearerTokenDecodeJson: DecodeJson[BearerToken] = {
+    DecodeJson(c => for {
+      bearer <- (c --\ "access_token").as[String]
+    } yield BearerToken(bearer))
   }
 
   case class Unavailable(resource: TwitterResource, ttl: Long) extends Token with Respondable {
