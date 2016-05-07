@@ -1,14 +1,19 @@
 package co.quine.gatekeeper.resources
 
 import akka.util.ByteString
-
-import scala.collection.mutable.{Set => mSet}
+import argonaut._, Argonaut._
 
 import co.quine.gatekeeper.protocol._
 
 object TwitterResources {
 
-  case class TwitterTokens(consumer: ConsumerToken, bearer: BearerToken, tokens: mSet[AccessToken])
+  sealed trait ClientRequest {
+    val uuid: String
+    val request: String
+  }
+
+  case class EndpointRequest(uuid: String, request: String) extends ClientRequest
+  case class ConsumerRequest(uuid: String, request: String) extends ClientRequest
 
   sealed trait Context
   case object AppContext extends Context
@@ -43,6 +48,26 @@ object TwitterResources {
     val serialized = s"${resource.encoded}:$ttl"
   }
 
+  implicit def AccessTokenEncodeJson: EncodeJson[AccessToken] = {
+    EncodeJson((t: AccessToken) =>
+      ("token_type" := t.typeId) ->: ("key" := t.key) ->: ("secret" := t.secret) ->: jEmptyObject)
+  }
+
+  implicit def ConsumerTokenEncodeJson: EncodeJson[ConsumerToken] = {
+    EncodeJson((t: ConsumerToken) =>
+      ("token_type" := t.typeId) ->: ("key" := t.key) ->: ("secret" := t.secret) ->: jEmptyObject)
+  }
+
+  implicit def BearerTokenEncodeJson: EncodeJson[BearerToken] = {
+    EncodeJson((t: BearerToken) =>
+      ("token_type" := t.typeId) ->: ("consumer" := t.consumer) ->: ("token" := t.token) ->: jEmptyObject)
+  }
+
+  implicit def NoneAvailableEncodeJson: EncodeJson[NoneAvailable] = {
+    EncodeJson((t: NoneAvailable) =>
+      ("token_type" := t.typeId) ->: ("resource" := t.resource.uri) ->: ("ttl" := t.ttl) ->: jEmptyObject)
+  }
+
   sealed abstract class TwitterResource {
     val appLimit: Int
     val userLimit: Int
@@ -50,18 +75,6 @@ object TwitterResources {
     val title: String
     val uri: String
     val encoded: String
-
-    def iterAll: Seq[TwitterResource] = Seq(
-      UsersLookup,
-      UsersShow,
-      StatusesLookup,
-      StatusesShow,
-      StatusesUserTimeline,
-      FriendsIds,
-      FriendsList,
-      FollowersIds,
-      FollowersList
-    )
 
     def bestContext = {
       if (appLimit > userLimit) AppContext
@@ -73,41 +86,6 @@ object TwitterResources {
         case AppContext => UserContext
         case UserContext => AppContext
     }
-
-
-    def lookup(uri: String): TwitterResource = {
-      val pattern = "(\\/(?:users|statuses|friends|followers)\\/[a-zA-z]+.json)".r
-      pattern.findFirstIn(uri) match {
-        case Some("/users/show.json") => UsersShow
-        case Some("/statuses/show.json") => StatusesShow
-        case Some("/statuses/lookup.json") => StatusesLookup
-        case Some("/users/lookup.json") => UsersLookup
-        case Some("/statuses/user_timeline.json") => StatusesUserTimeline
-        case Some("/friends/list.json") => FriendsList
-        case Some("/followers/list.json") => FollowersList
-        case Some("/friends/ids.json") => FriendsIds
-        case Some("/followers/ids.json") => FollowersList
-        case _ => InvalidTwitterResource
-      }
-    }
-  }
-
-  case object TwitterResourceStub extends TwitterResource {
-    val appLimit = 0
-    val userLimit = 0
-    val domain = "NA"
-    val title = "NA"
-    val uri = "NA"
-    val encoded = "NA"
-  }
-
-  case object InvalidTwitterResource extends TwitterResource {
-    val appLimit = 0
-    val userLimit = 0
-    val domain = "NA"
-    val title = "NA"
-    val uri = "NA"
-    val encoded = "NA"
   }
 
   case object UsersLookup extends TwitterResource {

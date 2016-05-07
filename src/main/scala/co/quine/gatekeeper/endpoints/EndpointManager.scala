@@ -9,15 +9,16 @@ import scala.collection.mutable.{Set => mSet}
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-import co.quine.gatekeeper.Gatekeeper
+import co.quine.gatekeeper._
 import co.quine.gatekeeper.actors.RateLimitActor
 import co.quine.gatekeeper.config.Config._
 import co.quine.gatekeeper.connectors.RedisConnector
 import co.quine.gatekeeper.tokens._
-import co.quine.gatekeeper.resources.TwitterResources._
 
 trait EndpointManager extends RedisConnector {
   self: Gatekeeper =>
+
+  import Codec._
 
   implicit val system: ActorSystem
   implicit val gatekeeper: Gatekeeper
@@ -49,7 +50,7 @@ trait EndpointManager extends RedisConnector {
 
   def parseBearerResponse(r: HttpResponse[String]): BearerToken = {
     val raw = Parse.parseWith(r.body, _.field("access_token").flatMap(_.string).getOrElse("Error"), msg => msg)
-    BearerToken(consumerToken, raw)
+    BearerToken(raw)
   }
 
   def invalidateBearer: HttpResponse[String] = {
@@ -98,7 +99,5 @@ trait EndpointManager extends RedisConnector {
   def followersIds = endpointMap(FollowersIds)
 
   def followersList = endpointMap(FollowersList)
-
-  def updateRateLimits() = rateLimitActor ! "update"
 
 }

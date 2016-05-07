@@ -4,8 +4,8 @@ import akka.actor._
 
 import scala.collection.mutable.{Set => mSet}
 
-import co.quine.gatekeeper.Gatekeeper
-import co.quine.gatekeeper.resources.TwitterResources._
+import co.quine.gatekeeper._
+import co.quine.gatekeeper.Codec._
 import co.quine.gatekeeper.tokens.{ResourceToken, TokenArray}
 
 class Endpoint(uri: TwitterResource)(
@@ -46,6 +46,6 @@ class Endpoint(uri: TwitterResource)(
 
   def ttl: Long = tokens.ttl
 
-  def get: Credential = tokens.grant
+  def get: Token = tokens.grant
 
 }

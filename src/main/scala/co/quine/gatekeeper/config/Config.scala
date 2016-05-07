@@ -8,7 +8,8 @@ object Config {
   private lazy val root = config.getConfig("gatekeeper")
 
   lazy val version = root.getString("version")
-  lazy val listenAddress = root.getString("listen-address")
+  lazy val host = root.getString("host")
+  lazy val port = root.getInt("port")
 
   object BackendConfig {
     private val backendConfig = root.getConfig("backends")

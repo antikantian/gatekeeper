@@ -6,8 +6,8 @@ import scalaj.http._
 
 import scala.concurrent.duration._
 
+import co.quine.gatekeeper.Codec._
 import co.quine.gatekeeper.config.Config.TwitterConfig._
-import co.quine.gatekeeper.resources.TwitterResources._
 import co.quine.gatekeeper.tokens._
 
 object RateLimitActor {
@@ -129,7 +129,7 @@ class RateLimitActor(tokens: Seq[ResourceToken], consumer: ConsumerToken) extend
     val rateLimitUpdates: Iterable[RateLimitStatus] = tokens.groupBy(_.key).map(_._2.head).flatMap { t =>
       t.credential match {
         case AccessToken(a, b) => requestCount += 1; rateLimitRequest(AccessToken(a, b))
-        case BearerToken(a, b) => requestCount += 1; rateLimitRequest(b)
+        case BearerToken(a) => requestCount += 1; rateLimitRequest(a)
       }
     }
 

@@ -1,15 +1,13 @@
 package co.quine.gatekeeper.tokens
 
+import co.quine.gatekeeper.Codec._
 import co.quine.gatekeeper.actors.RateLimitActor.RateLimitStatus
-import co.quine.gatekeeper.resources.TwitterResources._
 
 object ResourceToken {
-
-  def apply(token: Credential)(implicit resource: TwitterResource) = new ResourceToken(resource, token)
-
+  def apply(token: Token)(implicit resource: TwitterResource) = new ResourceToken(resource, token)
 }
 
-class ResourceToken(resource: TwitterResource, token: Credential) {
+class ResourceToken(resource: TwitterResource, token: Token) {
 
   private var remaining: Int = 0
 
@@ -19,13 +17,7 @@ class ResourceToken(resource: TwitterResource, token: Credential) {
 
   val key = token match {
     case AccessToken(a, b) => a
-    case BearerToken(a, b) => a.key
-  }
-
-  val tokenType = token match {
-    case AccessToken(_, _) => "access"
-    case BearerToken(_, _) => "bearer"
-    case _ => "NA"
+    case BearerToken(a) => a
   }
 
   def getResource: TwitterResource = resource
@@ -57,7 +49,7 @@ class ResourceToken(resource: TwitterResource, token: Credential) {
   def take = if (remaining - 1 >= 0) {
     remaining -= 1
     token
-  } else NoneAvailable(resource, ttl)
+  } else Unavailable(resource, ttl)
 
   def ttl: Long = resetTime
 
