@@ -14,7 +14,6 @@ import scala.concurrent.duration.Duration
 import co.quine.gatekeeper.actors.ServerActor
 import co.quine.gatekeeper.config.Config
 import co.quine.gatekeeper.actors._
-import co.quine.gatekeeper.resources.TwitterResources._
 
 object Main extends App {
 

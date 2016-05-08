@@ -6,10 +6,13 @@ import scalaj.http._
 
 import scala.concurrent.duration._
 
-import co.quine.gatekeeper.Codec._
+import co.quine.gatekeeper._
 import co.quine.gatekeeper.config.Config.TwitterConfig._
 
 object RateLimitActor {
+
+  import Codec._
+
   case class RateLimitArray(token: String, resources: Seq[RateLimitEndpoint])
   case class RateLimitEndpoint(resource: TwitterResource, stats: Stats)
   case class Stats(limit: Int, remaining: Int, reset: Long)
@@ -50,7 +53,7 @@ object RateLimitActor {
 
 class RateLimitActor(tokens: TokenBook) extends Actor with ActorLogging {
 
-  import co.quine.gatekeeper.Codec._
+  import Codec._
   import RateLimitActor._
 
   implicit val ec = context.dispatcher
