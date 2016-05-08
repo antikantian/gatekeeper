@@ -7,6 +7,7 @@ import java.nio.charset.Charset
 
 object Codec {
 
+  /** Constants */
   val UTF8_CHARSET = Charset.forName("UTF-8")
   val LS_STRING = "\r\n"
   val LS = LS_STRING.getBytes(UTF8_CHARSET)
@@ -25,6 +26,13 @@ object Codec {
   val ACCESSTOKEN = '@'
   val BEARERTOKEN = '%'
 
+  /** Sendables are objects that can be serialized and passed around between client and server */
+  sealed trait Sendable {
+    val typeId: Char
+    val uuid: String
+  }
+
+  /** Updates are sendables that go from client <--> server */
   sealed trait Update extends Sendable {
     val typeId = UPDATE
     val uuid = java.util.UUID.randomUUID.toString
@@ -37,11 +45,7 @@ object Codec {
     val payload = s"${token.serialized}[]${resource.serialized}[]${remaining.toString}[]${ttl.toString}"
   }
 
-  sealed trait Sendable {
-    val typeId: Char
-    val uuid: String
-  }
-
+  /** Requests are sendables that go from client --> server.  They take Requestables as a parameter */
   sealed trait Request extends Sendable {
     val typeId = REQUEST
     val uuid: String
@@ -52,15 +56,7 @@ object Codec {
   case class ConsumerRequest(uuid: String, request: ConsumerToken) extends Request
   case class NewBearerRequest(uuid: String, request: BearerToken) extends Request
 
-  sealed trait Response extends Sendable {
-    val typeId = RESPONSE
-    val uuid: String
-    val response: Respondable
-  }
-
-  case class TokenResponse(uuid: String, response: Token) extends Response
-  case class ErrorResponse(uuid: String, response: Respondable) extends Response
-
+  /** Requestables are objects that denote what is being requested */
   sealed trait Requestable {
     val serialized: String
   }
@@ -73,6 +69,17 @@ object Codec {
     val serialized = "BEARER"
   }
 
+  /** Responses are sendables that go from server --> client */
+  sealed trait Response extends Sendable {
+    val typeId = RESPONSE
+    val uuid: String
+    val response: Respondable
+  }
+
+  case class TokenResponse(uuid: String, response: Token) extends Response
+  case class ErrorResponse(uuid: String, response: Respondable) extends Response
+
+  /** Respondables are counterpart objects to Requestables and flow from server --> client */
   sealed trait Respondable {
     val typeId: Char
     val serialized: String
@@ -92,11 +99,12 @@ object Codec {
     val serialized: String
   }
 
-  case class AccessToken(key: String, secret: String) extends Token with Respondable {
+  case class AccessToken(key: String, secret: String) extends Token {
     val typeId = ACCESSTOKEN
     val serialized = typeId + s"$key:$secret"
   }
 
+  /** Redis codec for AccessToken, format = 'key:secret' */
   implicit val accessTokenByteStringFormatter = new ByteStringFormatter[AccessToken] {
     def serialize(data: AccessToken): ByteString = ByteString(s"${data.key}:${data.secret}")
     def deserialize(bs: ByteString): AccessToken = {
@@ -104,11 +112,12 @@ object Codec {
     }
   }
 
-  case class ConsumerToken(key: String, secret: String) extends Token with Respondable {
+  case class ConsumerToken(key: String, secret: String) extends Token {
     val typeId = CONSUMERTOKEN
     val serialized = typeId + s"$key:$secret"
   }
 
+  /** Redis codec for ConsumerToken, format = 'key:secret' */
   implicit val consumerTokenByteStringFormatter = new ByteStringFormatter[ConsumerToken] {
     def serialize(data: ConsumerToken): ByteString = ByteString(s"${data.key}:${data.secret}")
     def deserialize(bs: ByteString): ConsumerToken = {
@@ -116,7 +125,7 @@ object Codec {
     }
   }
 
-  case class BearerToken(token: String) extends Token with Respondable {
+  case class BearerToken(token: String) extends Token {
     val typeId = BEARERTOKEN
     val serialized = typeId + token
   }
@@ -127,7 +136,7 @@ object Codec {
     } yield BearerToken(bearer))
   }
 
-  case class Unavailable(resource: TwitterResource, ttl: Long) extends Token with Respondable {
+  case class Unavailable(resource: TwitterResource, ttl: Long) extends Token {
     val typeId = UNAVAILABLE
     val serialized = typeId + s"${resource.serialized}:$ttl"
   }
