@@ -2,7 +2,6 @@ package co.quine.gatekeeper.actors
 
 import akka.actor._
 import akka.pattern.ask
-import akka.util.Timeout
 import argonaut._
 import scalaj.http._
 import scala.collection.mutable
@@ -15,19 +14,18 @@ import co.quine.gatekeeper.config.Config._
 import co.quine.gatekeeper.connectors._
 
 object GatekeeperActor {
-
   def props(librarian: ActorRef) = Props(new GatekeeperActor(librarian))
 }
 
 class GatekeeperActor(librarian: ActorRef)
-  extends EndpointManager
-    with RedisConnector
+  extends RedisConnector
     with Actor
     with ActorLogging {
 
   import Codec._
 
   var tokens: TokenBook = _
+  var rateLimitActor: ActorRef = _
 
   val endpointArray = mutable.ArrayBuffer[EndpointCard]()
 
@@ -39,20 +37,18 @@ class GatekeeperActor(librarian: ActorRef)
     } yield TokenBook(redisAccess, redisConsumer.getOrElse(throw new Exception("Consumer not found")), twitterBearer)
 
     tokenFutures onSuccess {
-      case t@TokenBook(access: Seq[AccessToken], consumer: ConsumerToken, bearer: BearerToken) => tokens = t
+      case t@TokenBook(access: Seq[AccessToken], consumer: ConsumerToken, bearer: BearerToken) =>
+        tokens = t
+        rateLimitActor = context.actorOf(RateLimitActor.props(t), "rate-limit")
     }
   }
 
-  def receive = clients orElse endpoints
-
+  def receive = clients
 
   def clients: Receive = {
     case r: Request => onRequest(r, sender)
     case r: RateLimit => lookupEndpoint(r.resource) ! r
-  }
-
-  def endpoints: Receive = {
-
+    case r: NewBearerRequest => refreshBearerToken(r, sender)
   }
 
   def onRequest(r: Request, origin: ActorRef) = r match {
@@ -67,13 +63,15 @@ class GatekeeperActor(librarian: ActorRef)
   }
 
   def onUpdate(u: Update): Unit = u match {
-    case RateLimit(token, resource, remaining, ttl) =>
+    case r@RateLimit(token, resource, remaining, ttl) => lookupEndpoint(resource) ! r
   }
 
   private def createEndpoint(resource: TwitterResource): Unit = {
     val endpointActor = context.actorOf(EndpointActor.props(resource, tokens))
     endpointArray.append(EndpointCard(resource, endpointActor))
   }
+
+  private def distributeBearerToken(b: BearerToken): Unit = endpointArray.foreach(_.address ! NewBearerToken(b))
 
   private def lookupEndpoint(r: Resource): ActorRef = {
     endpointArray.find(e => e.resource == r) match {
@@ -82,13 +80,14 @@ class GatekeeperActor(librarian: ActorRef)
     }
   }
 
-  private def invalidateBearer: HttpResponse[String] = {
+  private def invalidateBearerToken: Boolean = {
     Http("https://api.twitter.com/oauth2/invalidate_token")
       .auth(tokens.consumer.key, tokens.consumer.secret)
       .header("User-Agent", s"Gatekeeper v$version")
       .header("Content-Type", "application/x-www-form-urlencoded")
       .postForm(Seq(("access_token", tokens.bearer.token)))
       .asString
+      .is2xx
   }
 
   private def obtainBearerToken(consumer: ConsumerToken): Future[BearerToken] = Future {
@@ -100,5 +99,15 @@ class GatekeeperActor(librarian: ActorRef)
       .asString
 
     Parse.decodeOption[BearerToken](response.body).getOrElse(BearerToken("Unavailable"))
+  }
+
+  private def refreshBearerToken(request: NewBearerRequest, replyTo: ActorRef): Unit = {
+    invalidateBearerToken match {
+      case true => obtainBearerToken(tokens.consumer) onSuccess {
+        case token@BearerToken(b) =>
+          distributeBearerToken(token)
+          replyTo ! TokenResponse(request.uuid, token)
+      }
+    }
   }
 }

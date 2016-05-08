@@ -14,6 +14,7 @@ object Codec {
   val REQUEST = '?'
   val RESPONSE = '!'
   val UPDATE = '>'
+  val COMMAND = '+'
 
   val UUID = '#'
 
@@ -49,6 +50,7 @@ object Codec {
 
   case class TokenRequest(uuid: String, request: Resource) extends Request
   case class ConsumerRequest(uuid: String, request: ConsumerToken) extends Request
+  case class NewBearerRequest(uuid: String, request: BearerToken) extends Request
 
   sealed trait Response extends Sendable {
     val typeId = RESPONSE
@@ -65,6 +67,10 @@ object Codec {
 
   case object ConsumerToken extends Requestable {
     val serialized = "CONSUMER"
+  }
+
+  case object BearerToken extends Requestable {
+    val serialized = "BEARER"
   }
 
   sealed trait Respondable {
