@@ -14,6 +14,14 @@ import co.quine.gatekeeper.config.Config._
 import co.quine.gatekeeper.connectors._
 
 object GatekeeperActor {
+
+  import Codec._
+
+  case object Endpoints {
+    val all = Seq(UsersLookup, UsersShow, StatusesLookup, StatusesShow, StatusesUserTimeline,
+      FriendsIds, FriendsList, FollowersIds, FollowersList)
+  }
+
   def props(librarian: ActorRef) = Props(new GatekeeperActor(librarian))
 }
 
@@ -23,6 +31,7 @@ class GatekeeperActor(librarian: ActorRef)
     with ActorLogging {
 
   import Codec._
+  import GatekeeperActor._
 
   var tokens: TokenBook = _
   var rateLimitActor: ActorRef = _
@@ -40,6 +49,10 @@ class GatekeeperActor(librarian: ActorRef)
       case t@TokenBook(access: Seq[AccessToken], consumer: ConsumerToken, bearer: BearerToken) =>
         tokens = t
         rateLimitActor = context.actorOf(RateLimitActor.props(t), "rate-limit")
+        Endpoints.all foreach { resource =>
+          val endpointActor = context.actorOf(EndpointActor.props(resource, t))
+          endpointArray.append(EndpointCard(resource, endpointActor))
+        }
     }
   }
 
