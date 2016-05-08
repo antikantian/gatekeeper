@@ -63,8 +63,8 @@ object Codec {
   }
 
   case class TokenRequest(uuid: String, request: Resource) extends Request
-  case class ConsumerRequest(uuid: String, request: ConsumerToken) extends Request
-  case class NewBearerRequest(uuid: String, request: BearerToken) extends Request
+  case class ConsumerRequest(uuid: String, request: Requestable) extends Request
+  case class NewBearerRequest(uuid: String, request: Requestable) extends Request
 
   /** Requestables are objects that denote what is being requested */
   sealed trait Requestable {

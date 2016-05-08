@@ -15,8 +15,6 @@ object ClientActor {
 class ClientActor(gate: ActorRef, client: ActorRef) extends Actor with ActorLogging {
 
   import Codec._
-  import Deserializer._
-  import Serializer._
 
   def receive = gatekeeper orElse tcp
 

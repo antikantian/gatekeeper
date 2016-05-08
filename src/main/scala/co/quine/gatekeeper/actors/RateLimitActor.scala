@@ -13,13 +13,12 @@ object RateLimitActor {
 
   import Codec._
 
-  case class RateLimitArray(token: String, resources: Seq[RateLimitEndpoint])
+  case class RateLimitArray(resources: Seq[RateLimitEndpoint])
   case class RateLimitEndpoint(resource: TwitterResource, stats: Stats)
   case class Stats(limit: Int, remaining: Int, reset: Long)
 
   implicit def RateLimitArrayDecodeJson: DecodeJson[RateLimitArray] = {
     DecodeJson(c => for {
-      token <- (c --\ "rate_limit_context" =\ 1).as[String]
       usersLookup <- (c --\ "resources" --\ "users" --\ "/users/lookup").as[Stats]
       usersShow <- (c --\ "resources" --\ "users" --\ "/users/show/:id").as[Stats]
       sLookup <- (c --\ "resources" --\ "statuses" --\  "/statuses/lookup").as[Stats]
@@ -28,7 +27,7 @@ object RateLimitActor {
       friendsList <- (c --\ "resources" --\ "friends" --\ "/friends/list").as[Stats]
       followersIds <- (c --\ "resources" --\ "followers" --\ "/followers/ids").as[Stats]
       followersList <- (c --\ "resources" --\ "followers" --\ "/followers/list").as[Stats]
-      } yield RateLimitArray(token,
+      } yield RateLimitArray(
                              Seq(RateLimitEndpoint(UsersLookup, usersLookup),
                                  RateLimitEndpoint(UsersShow, usersShow),
                                  RateLimitEndpoint(StatusesLookup, sLookup),
@@ -62,23 +61,23 @@ class RateLimitActor(tokens: TokenBook) extends Actor with ActorLogging {
 
   val rateLimitUri = s"$twitterScheme://$twitterHost/$twitterVersion/application/rate_limit_status.json"
 
-  def rateLimitRequest(bearer: BearerToken): Seq[RateLimit] = {
+  def rateLimitRequest(bearer: BearerToken): Option[Seq[RateLimit]] = {
     val request = Http(rateLimitUri).header("Authorization", s"Bearer ${bearer.token}").asString
-    parseRateLimitResponse(request)
+    parseRateLimitResponse(request) map { update =>
+      update.resources.map(e => RateLimit(bearer, e.resource, e.stats.remaining, e.stats.reset))
+    }
   }
 
-  def rateLimitRequest(token: AccessToken): Seq[RateLimit] = {
+  def rateLimitRequest(token: AccessToken): Option[Seq[RateLimit]] = {
     val consumer_token = Token(tokens.consumer.key, tokens.consumer.secret)
     val access_token = Token(token.key, token.secret)
     val request = Http(rateLimitUri).oauth(consumer_token, access_token).asString
-    parseRateLimitResponse(request)
+    parseRateLimitResponse(request) map { update =>
+      update.resources.map(e => RateLimit(token, e.resource, e.stats.remaining, e.stats.reset))
+    }
   }
 
-  def parseRateLimitResponse(r: HttpResponse[String]) = Parse.decodeOption[RateLimitArray](r.body) match {
-    case Some(update) =>
-      val token = tokens.findByKey(update.token) match { case Some(x) => x }
-      update.resources.map(e => RateLimit(token, e.resource, e.stats.remaining, e.stats.reset))
-  }
+  def parseRateLimitResponse(r: HttpResponse[String]) = Parse.decodeOption[RateLimitArray](r.body)
 
   def runUpdate(): Unit = {
     log.info("Running ratelimit update")

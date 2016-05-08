@@ -40,11 +40,11 @@ class EndpointActor(resource: TwitterResource, tokens: TokenBook) extends Actor 
 
   def limit: Int = tokenPool.foldLeft(0)((count, rt) => count + getLimit(rt.token))
 
-  def mostCalls: ResourceToken = tokenPool.max(Ordering.by(t => t.remaining))
+  def mostCalls: ResourceToken = tokenPool.max(Ordering.by((t: ResourceToken) => t.remaining))
 
   def remaining: Int = tokenPool.foldLeft(0)((count, rt) => count + rt.remaining)
 
-  def ttl: Long = tokenPool.min(Ordering.by(t => t.reset)).reset
+  def ttl: Long = tokenPool.min(Ordering.by((t: ResourceToken) => t.reset)).reset
 
   private def getLimit(t: Token): Int = t match {
     case x: AccessToken => resource.userLimit

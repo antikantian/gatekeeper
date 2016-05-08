@@ -2,11 +2,18 @@ package co.quine.gatekeeper
 
 import akka.actor._
 
-import co.quine.gatekeeper.endpoints._
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
 
-class Gatekeeper()(implicit val system: ActorSystem)
-  extends EndpointManager {
+import co.quine.gatekeeper.actors._
 
-  implicit val gatekeeper = this
+object Gatekeeper extends App {
+
+  implicit val system = ActorSystem("gatekeeper-server")
+
+  val gatekeeper = system.actorOf(GatekeeperActor.props, "gatekeeper-main")
+  val server = system.actorOf(ServerActor.props(gatekeeper), "gatekeeper-server")
+
+  Await.result(system.whenTerminated, Duration.Inf)
 
 }

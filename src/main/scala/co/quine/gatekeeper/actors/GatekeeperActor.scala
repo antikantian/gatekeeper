@@ -2,7 +2,9 @@ package co.quine.gatekeeper.actors
 
 import akka.actor._
 import akka.pattern.ask
+import akka.util.Timeout
 import argonaut._
+import redis._
 import scalaj.http._
 import scala.collection.mutable
 import scala.concurrent._
@@ -11,7 +13,6 @@ import scala.util.{Success, Failure}
 
 import co.quine.gatekeeper._
 import co.quine.gatekeeper.config.Config._
-import co.quine.gatekeeper.connectors._
 
 object GatekeeperActor {
 
@@ -22,16 +23,19 @@ object GatekeeperActor {
       FriendsIds, FriendsList, FollowersIds, FollowersList)
   }
 
-  def props(librarian: ActorRef) = Props(new GatekeeperActor(librarian))
+  def props = Props(new GatekeeperActor)
 }
 
-class GatekeeperActor(librarian: ActorRef)
-  extends RedisConnector
-    with Actor
+class GatekeeperActor
+  extends Actor
     with ActorLogging {
 
   import Codec._
   import GatekeeperActor._
+
+  implicit val system = context.system
+  implicit val ec = context.dispatcher
+  implicit val timeout = Timeout(60.seconds)
 
   var tokens: TokenBook = _
   var rateLimitActor: ActorRef = _
@@ -39,6 +43,7 @@ class GatekeeperActor(librarian: ActorRef)
   val endpointArray = mutable.ArrayBuffer[EndpointCard]()
 
   override def preStart() = {
+    val rc = new RedisClient(host = BackendConfig.redisHost)
     val tokenFutures = for {
       redisAccess <- rc.smembers[AccessToken]("twitter:access_tokens")
       redisConsumer <- rc.get[ConsumerToken]("twitter:consumer_token")
@@ -54,29 +59,32 @@ class GatekeeperActor(librarian: ActorRef)
           endpointArray.append(EndpointCard(resource, endpointActor))
         }
     }
+    log.info(s"${self.path.name}: Ready")
   }
 
   def receive = clients
 
   def clients: Receive = {
     case r: Request => onRequest(r, sender)
-    case r: RateLimit => lookupEndpoint(r.resource) ! r
+    case r: RateLimit => lookupEndpoint(r.resource).foreach(epc => epc.address ! r)
     case r: NewBearerRequest => refreshBearerToken(r, sender)
   }
 
   def onRequest(r: Request, origin: ActorRef) = r match {
     case TokenRequest(uuid, resource) =>
-      val endpoint = lookupEndpoint(resource)
       implicit val ec = context.dispatcher
-      endpoint.ask(NeedToken)(5.seconds) andThen {
-        case Success(x: Token) => origin ! TokenResponse(uuid, x)
-        case Failure(_) => origin ! ErrorResponse(uuid, ResourceDown)
+      lookupEndpoint(resource) foreach { epc =>
+        epc.address.ask(NeedToken)(5.seconds) andThen {
+          case Success(x: Token) => origin ! TokenResponse(uuid, x)
+          case Failure(_) => origin ! ErrorResponse(uuid, ResourceDown)
+        }
       }
     case ConsumerRequest(uuid, _) => origin ! TokenResponse(uuid, tokens.consumer)
   }
 
   def onUpdate(u: Update): Unit = u match {
-    case r@RateLimit(token, resource, remaining, ttl) => lookupEndpoint(resource) ! r
+    case r@RateLimit(token, resource, remaining, ttl) =>
+      lookupEndpoint(resource).foreach(epc => epc.address ! r)
   }
 
   private def createEndpoint(resource: TwitterResource): Unit = {
@@ -86,12 +94,7 @@ class GatekeeperActor(librarian: ActorRef)
 
   private def distributeBearerToken(b: BearerToken): Unit = endpointArray.foreach(_.address ! NewBearerToken(b))
 
-  private def lookupEndpoint(r: Resource): ActorRef = {
-    endpointArray.find(e => e.resource == r) match {
-      case Some(endpoint) => endpoint.address
-      case _ =>
-    }
-  }
+  private def lookupEndpoint(r: Resource): Option[EndpointCard] = endpointArray.find(e => e.resource == r)
 
   private def invalidateBearerToken: Boolean = {
     Http("https://api.twitter.com/oauth2/invalidate_token")
