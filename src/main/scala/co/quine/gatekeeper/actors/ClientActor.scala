@@ -26,13 +26,19 @@ class ClientActor(gate: ActorRef, client: ActorRef) extends Actor with ActorLogg
     case Received(bs) => onData(bs)
   }
 
-  def onData(bs: ByteString) = bs.deserialize match {
-    case s: Request => gate ! s
-    case s: Update => gate ! s
+  def onData(bs: ByteString) = {
+    bs.deserialize match {
+      case s: Request => gate ! s
+      case s: Update => gate ! s
+    }
+    log.info("Received: " + bs.utf8String)
   }
 
-  def onResponse(r: Response) = r match {
-    case r @ TokenResponse(uuid, token) => client ! Write(r.encode)
+  def onResponse(r: Response) = {
+    r match {
+      case r @ TokenResponse(uuid, token) => client ! Write(r.encode)
+    }
+    log.info("Sent: " + r.serialize)
   }
 
 }

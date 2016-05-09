@@ -266,7 +266,7 @@ object Codec {
 
       val s = bs.utf8String.diff(LS_STRING)
 
-      val parts = s.split("^")
+      val parts = s.split('^')
 
       val uuid = parts.head.tail
 
@@ -283,9 +283,11 @@ object Codec {
           case r: TwitterResource => TokenRequest(uuid, r)
           case r: ConsumerToken => ConsumerRequest(uuid, r)
         }
+
         case m: Respondable => m match {
           case r: Token => TokenResponse(uuid, r)
         }
+
         case m: Update => m match {
           case r @ RateLimit(token, resource, remaining, ttl) => r
         }

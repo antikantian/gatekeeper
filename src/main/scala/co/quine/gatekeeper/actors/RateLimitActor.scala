@@ -23,6 +23,7 @@ object RateLimitActor {
       usersShow <- (c --\ "resources" --\ "users" --\ "/users/show/:id").as[Stats]
       sLookup <- (c --\ "resources" --\ "statuses" --\  "/statuses/lookup").as[Stats]
       sShow <- (c --\ "resources" --\ "statuses" --\ "/statuses/show/:id").as[Stats]
+      sUserTimeline <- (c --\ "resources" --\ "statuses" --\ "/statuses/user_timeline").as[Stats]
       friendsIds <- (c --\ "resources" --\ "friends" --\ "/friends/ids").as[Stats]
       friendsList <- (c --\ "resources" --\ "friends" --\ "/friends/list").as[Stats]
       followersIds <- (c --\ "resources" --\ "followers" --\ "/followers/ids").as[Stats]
@@ -32,6 +33,7 @@ object RateLimitActor {
                                  RateLimitEndpoint(UsersShow, usersShow),
                                  RateLimitEndpoint(StatusesLookup, sLookup),
                                  RateLimitEndpoint(StatusesShow, sShow),
+                                 RateLimitEndpoint(StatusesUserTimeline, sUserTimeline),
                                  RateLimitEndpoint(FriendsIds, friendsIds),
                                  RateLimitEndpoint(FriendsList, friendsList),
                                  RateLimitEndpoint(FollowersIds, followersIds),
@@ -89,14 +91,18 @@ class RateLimitActor(tokens: TokenBook) extends Actor with ActorLogging {
       case token: AccessToken =>
         requestCount += 1
         rateLimitRequest(token) foreach { r =>
-          updateCount += 1
-          context.parent ! r
+          r foreach { update =>
+            updateCount += 1
+            context.parent ! update
+          }
         }
       case token: BearerToken =>
         requestCount += 1
         rateLimitRequest(token) foreach { r =>
-          updateCount += 1
-          context.parent ! r
+          r foreach { update =>
+            updateCount += 1
+            context.parent ! update
+          }
         }
     }
     log.info(s"Ratelimit update complete: $requestCount requests, $updateCount updates")
