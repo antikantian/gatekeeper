@@ -7,6 +7,28 @@ import java.nio.charset.Charset
 
 object Codec {
 
+  /**
+    * Format: #UUID|TYPE:WHAT|RESOURCE|PAYLOAD
+    * Ex: #UUID|REQUEST:CREDENTIAL|USHOW|NONE
+    * Ex: #UUID|RESPONSE:ACCESSTOKEN|USHOW|KEY:SECRET
+    */
+
+  sealed trait Message {
+    val uuid: String
+    val serialized: String
+  }
+
+  case class Request(requesting: String, resource: Resource) extends Message
+  case class Response(uuid: String, kind: String, resource: Resource, payload: String) extends Message
+
+
+
+
+
+
+
+
+
   /** Constants */
   val UTF8_CHARSET = Charset.forName("UTF-8")
   val LS_STRING = "\r\n"
