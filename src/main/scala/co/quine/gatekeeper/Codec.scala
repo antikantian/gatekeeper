@@ -18,9 +18,11 @@ object Codec {
     val serialized: String
   }
 
-  case class Request(requesting: String, resource: Resource) extends Message
-  case class Response(uuid: String, kind: String, resource: Resource, payload: String) extends Message
+  case class Grant(resource: Resource) extends Message
+  case class Remaining(resource: Resource) extends Message
+  case class TTL(resource: Resource) extends Message
 
+  case class Token(typeId: Char, credential: String) extends Message
 
 
 
