@@ -23,6 +23,7 @@ class EndpointActor(resource: TwitterResource, tokens: TokenBook) extends Actor 
 
   def request: Receive = {
     case NeedToken => sender ! grant
+    case Remaining(_) => sender ! remaining
   }
 
   def update: Receive = {

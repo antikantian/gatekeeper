@@ -42,6 +42,20 @@ object Codec {
     def encode = ByteString(s.serialize + LS_STRING)
   }
 
+  sealed trait Command extends Sendable {
+    val typeId = COMMAND
+    val uuid = java.util.UUID.randomUUID.toString
+    val cmd: String
+  }
+
+  case class Remaining(resource: TwitterResource) extends Command {
+    val cmd = s"REM:${resource.serialized}"
+  }
+
+  case class TTL(resource: TwitterResource) extends Command {
+    val cmd = s"TTL:${resource.serialized}"
+  }
+
   /** Updates are sendables that go from client <--> server */
   sealed trait Update extends Sendable {
     val typeId = UPDATE
