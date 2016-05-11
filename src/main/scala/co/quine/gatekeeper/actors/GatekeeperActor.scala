@@ -57,29 +57,16 @@ class GatekeeperActor extends Actor with ActorLogging {
     log.info(s"${self.path.name}: Ready")
   }
 
-  def receive = clients
+  def receive = commands
 
-  def clients: Receive = {
-    case r: Request => onRequest(r, sender)
-    case r: RateLimit => lookupEndpoint(r.resource).foreach(epc => epc.address ! r)
-    case r: NewBearerRequest => refreshBearerToken(r, sender)
-  }
-
-  def onRequest(r: Request, origin: ActorRef) = r match {
-    case TokenRequest(uuid, resource) =>
-      implicit val ec = context.dispatcher
-      lookupEndpoint(resource) foreach { epc =>
-        epc.address.ask(NeedToken)(5.seconds) andThen {
-          case Success(x: Token) => origin ! TokenResponse(uuid, x)
-          case Failure(_) => origin ! ErrorResponse(uuid, ResourceDown)
-        }
-      }
-    case ConsumerRequest(uuid, _) => origin ! TokenResponse(uuid, tokens.consumer)
-  }
-
-  def onUpdate(u: Update): Unit = u match {
-    case r@RateLimit(token, resource, remaining, ttl) =>
-      lookupEndpoint(resource).foreach(epc => epc.address ! r)
+  def commands: Receive = {
+    case Consumer => sender ! tokens.consumer
+    case NewBearer => refreshBearerToken(sender())
+    case cmd@Grant(resource) => lookupEndpoint(resource).foreach(epc => epc.address forward cmd)
+    case cmd@Remaining(resource) => lookupEndpoint(resource).foreach(epc => epc.address forward cmd)
+    case cmd@TTL(resource) => lookupEndpoint(resource).foreach(epc => epc.address forward cmd)
+    case cmd@RateLimit(resource, tokenKey, remaining, reset) =>
+      lookupEndpoint(resource).foreach(epc => epc.address forward cmd)
   }
 
   private def createEndpoint(resource: TwitterResource): Unit = {
@@ -96,7 +83,7 @@ class GatekeeperActor extends Actor with ActorLogging {
       .auth(tokens.consumer.key, tokens.consumer.secret)
       .header("User-Agent", s"Gatekeeper v$version")
       .header("Content-Type", "application/x-www-form-urlencoded")
-      .postForm(Seq(("access_token", tokens.bearer.token)))
+      .postForm(Seq(("access_token", tokens.bearer.key)))
       .asString
       .is2xx
   }
@@ -112,12 +99,12 @@ class GatekeeperActor extends Actor with ActorLogging {
     Parse.decodeOption[BearerToken](response.body).getOrElse(BearerToken("Unavailable"))
   }
 
-  private def refreshBearerToken(request: NewBearerRequest, replyTo: ActorRef): Unit = {
+  private def refreshBearerToken(replyTo: ActorRef): Unit = {
     invalidateBearerToken match {
       case true => obtainBearerToken(tokens.consumer) onSuccess {
         case token@BearerToken(b) =>
           distributeBearerToken(token)
-          replyTo ! TokenResponse(request.uuid, token)
+          replyTo ! token
       }
     }
   }

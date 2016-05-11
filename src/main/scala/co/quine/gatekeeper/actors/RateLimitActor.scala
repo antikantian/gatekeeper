@@ -64,9 +64,9 @@ class RateLimitActor(tokens: TokenBook) extends Actor with ActorLogging {
   val rateLimitUri = s"$twitterScheme://$twitterHost/$twitterVersion/application/rate_limit_status.json"
 
   def rateLimitRequest(bearer: BearerToken): Option[Seq[RateLimit]] = {
-    val request = Http(rateLimitUri).header("Authorization", s"Bearer ${bearer.token}").asString
+    val request = Http(rateLimitUri).header("Authorization", s"Bearer ${bearer.key}").asString
     parseRateLimitResponse(request) map { update =>
-      update.resources.map(e => RateLimit(bearer, e.resource, e.stats.remaining, e.stats.reset))
+      update.resources.map(e => RateLimit(e.resource, bearer.key, e.stats.remaining, e.stats.reset))
     }
   }
 
@@ -75,7 +75,7 @@ class RateLimitActor(tokens: TokenBook) extends Actor with ActorLogging {
     val access_token = Token(token.key, token.secret)
     val request = Http(rateLimitUri).oauth(consumer_token, access_token).asString
     parseRateLimitResponse(request) map { update =>
-      update.resources.map(e => RateLimit(token, e.resource, e.stats.remaining, e.stats.reset))
+      update.resources.map(e => RateLimit(e.resource, token.key, e.stats.remaining, e.stats.reset))
     }
   }
 

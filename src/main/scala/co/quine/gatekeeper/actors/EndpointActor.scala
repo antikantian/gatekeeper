@@ -19,22 +19,24 @@ class EndpointActor(resource: TwitterResource, tokens: TokenBook) extends Actor 
 
   override def preStart() = resetPool()
 
-  def receive = request orElse update
+  def receive = command orElse update
 
-  def request: Receive = {
-    case NeedToken => sender ! grant
-    case Remaining(_) => sender ! remaining
+  def command: Receive = {
+    case cmd: Grant => sender ! grant
+    case cmd: Remaining => sender ! remaining
+    case cmd: TTL => sender ! ttl
   }
 
   def update: Receive = {
-    case u: RateLimit => updateResourceToken(u.token, u.remaining, u.ttl)
+    case u: RateLimit =>
+      tokens.findByKey(u.token).foreach(updateResourceToken(_, u.remaining, u.reset))
   }
 
   def addToken(token: Token) = tokenPool.append(ResourceToken(token, 0, 0))
 
-  def grant: Token = hasCalls match {
+  def grant = hasCalls match {
     case true => takeFromResourceToken(mostCalls)
-    case false => Unavailable(resource, ttl)
+    case false => ttl
   }
 
   def hasCalls: Boolean = if (remaining > 0) true else false
