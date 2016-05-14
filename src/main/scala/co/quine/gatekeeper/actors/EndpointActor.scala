@@ -34,9 +34,9 @@ class EndpointActor(resource: TwitterResource, tokens: TokenBook) extends Actor 
 
   def addToken(token: Token) = tokenPool.append(ResourceToken(token, 0, 0))
 
-  def grant = hasCalls match {
+  def grant: Token = hasCalls match {
     case true => takeFromResourceToken(mostCalls)
-    case false => ttl
+    case false => UnavailableToken(ttl)
   }
 
   def hasCalls: Boolean = if (remaining > 0) true else false

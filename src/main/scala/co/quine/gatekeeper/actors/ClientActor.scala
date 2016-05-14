@@ -36,17 +36,13 @@ class ClientActor(gate: ActorRef, client: ActorRef) extends Actor with ActorLogg
 
   def onRequest(s: String) = s.split('|') match {
     case Array(typeId, uuid, cmdArgs) =>
-      val response = cmdArgs.split(':') match {
-        case Array(c, a) => onCommand(c, a)
-        case Array(c) => onCommand(c)
-      }
+      val requestId = uuid.tail
+
+      val response = cmdArgs.split(':') match { case Array(c, a) => onCommand(c, a) }
+
       response andThen {
-        case Success(x: Token) =>
-          log.info("Sending: " + Response(uuid.tail, x.serialize).serialize)
-          client ! Write(ByteString(Response(uuid.tail, x.serialize).serialize))
-        case Success(x: Int) => client ! Write(ByteString(Response(uuid.tail, x.toString).serialize))
-        case Success(x: Long) => client ! Write(ByteString(Response(uuid.tail, x.toString).serialize))
-        case Failure(_) => client ! Write(ByteString(Error(uuid.tail, "UNAVAILABLE", "DOWN").serialize))
+        case Success(x: String) => client ! Write(ByteString(Response(requestId, x).serialize))
+        case Failure(_) => client ! Write(ByteString(Error(requestId, "UNAVAILABLE", "DOWN").serialize))
       }
   }
 
@@ -59,14 +55,25 @@ class ClientActor(gate: ActorRef, client: ActorRef) extends Actor with ActorLogg
     }
   }
 
-  def onCommand(cmd: String) = cmd match {
-    case "CONSUMER" => gate ? Consumer
-    case "NEWBEARER" => gate ? NewBearer
-  }
-
   def onCommand(cmd: String, args: String) = cmd match {
-    case "GRANT" => gate ? Grant(args)
-    case "REM" => gate ? Remaining(args)
-    case "TTL" => gate ? TTL(args)
+    case "CONSUMER" => gate ? Consumer collect {
+      case response: Token => response.serialize
+    }
+
+    case "GRANT" => gate ? Grant(args) collect {
+      case response: Token => response.serialize
+    }
+
+    case "NEWBEARER" => gate ? NewBearer collect {
+      case response: Token => response.serialize
+    }
+
+    case "REM" => gate ? Remaining(args) collect {
+      case response: Int => s"${UPDATE}REM:$response"
+    }
+
+    case "TTL" => gate ? TTL(args) collect {
+      case response: Long => s"${UPDATE}TTL:$response"
+    }
   }
 }

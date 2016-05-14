@@ -16,12 +16,14 @@ object Codec {
 
   val REQUEST = '?'
   val RESPONSE = '!'
+  val REPORT = '='
   val UPDATE = '+'
   val UUID = '#'
   val ERROR = '-'
   val CONSUMERTOKEN = '&'
   val ACCESSTOKEN = '@'
   val BEARERTOKEN = '%'
+  val UNAVAILABLE = '*'
 
   case class Request(uuid: String, cmd: String, args: String = "None") {
     val typeId = REQUEST
@@ -37,6 +39,14 @@ object Codec {
 
   case class Update(cmd: String, payload: String) {
     val typeId = UPDATE
+
+    def serialize = s"$typeId|$cmd|$payload"
+  }
+
+  case class Report(uuid: String, payload: String) {
+    val typeId = REPORT
+
+    def serialize = s"$typeId|$UUID$uuid|$payload"
   }
 
   case class Error(uuid: String, reason: String, message: String) {
@@ -67,6 +77,12 @@ object Codec {
     val typeId = BEARERTOKEN
 
     def serialize = s"$typeId$key"
+  }
+
+  case class UnavailableToken(ttl: Long) extends Token {
+    val typeId = UNAVAILABLE
+
+    def serialize = s"$typeId$ttl"
   }
 
   implicit def token2String(t: Token): String = t.serialize

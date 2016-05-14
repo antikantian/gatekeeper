@@ -13,6 +13,7 @@ object Gatekeeper extends App {
 
   val gatekeeper = system.actorOf(GatekeeperActor.props, "gatekeeper-main")
   val server = system.actorOf(ServerActor.props(gatekeeper), "gatekeeper-server")
+  val updateListener = system.actorOf(UpdateActor.props(gatekeeper), "gatekeeper-update")
 
   Await.result(system.whenTerminated, Duration.Inf)
 
