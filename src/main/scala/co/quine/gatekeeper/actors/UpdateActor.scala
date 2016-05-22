@@ -17,7 +17,10 @@ class UpdateActor(gate: ActorRef) extends Actor with ActorLogging {
   import Codec._
   import context.system
 
-  IO(Udp) ! Udp.Bind(self, new InetSocketAddress(Config.host, Config.port))
+  val host = Config.host
+  val port = Config.port
+
+  IO(Udp) ! Udp.Bind(self, new InetSocketAddress(host, port))
 
   def receive = {
     case Udp.Bound(local) =>
@@ -27,7 +30,6 @@ class UpdateActor(gate: ActorRef) extends Actor with ActorLogging {
 
   def ready(socket: ActorRef): Receive = {
     case Udp.Received(data, remote) =>
-      log.info("Upd received: " + data.utf8String)
       onData(data)
     case Udp.Unbind => socket ! Udp.Unbind
     case Udp.Unbound => context.stop(self)
@@ -44,6 +46,8 @@ class UpdateActor(gate: ActorRef) extends Actor with ActorLogging {
   }
 
   def rateLimitUpdate(payload: String): RateLimit = payload.split(':') match {
-    case Array(key, resource, remaining, reset) => RateLimit(resource, key, remaining.toInt, reset.toLong)
+    case Array(key, resource, remaining, reset) =>
+      log.info(s"$key|$remaining remaining, reset at: $reset")
+      RateLimit(resource, key, remaining.toInt, reset.toLong)
   }
 }

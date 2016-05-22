@@ -16,17 +16,27 @@ object ClientActor {
 
 class ClientActor(gate: ActorRef, client: ActorRef) extends Actor with ActorLogging {
 
+  import BufferActor._
   import Codec._
   import context.dispatcher
 
   implicit val timeout = Timeout(5.seconds)
 
+  var buffer: ActorRef = _
+
+  override def preStart() = {
+    val heartbeat = context.actorOf(HeartbeatActor.props(client), s"${self.path.name}-heartbeat")
+    context.watch(heartbeat)
+    buffer = context.actorOf(BufferActor.props(self), s"${self.path.name}-buffer")
+  }
+
   def receive = tcp
 
   def tcp: Receive = {
-    case Received(bs) =>
-      log.info("Received: " + bs.utf8String)
-      onData(bs)
+    case Received(bs) => buffer ! bs
+    case Packet(bs) => onData(bs)
+    case (Closed | ErrorClosed | PeerClosed) =>
+      context.stop(self)
   }
 
   def onData(bs: ByteString) = bs.head match {
@@ -41,8 +51,8 @@ class ClientActor(gate: ActorRef, client: ActorRef) extends Actor with ActorLogg
       val response = cmdArgs.split(':') match { case Array(c, a) => onCommand(c, a) }
 
       response andThen {
-        case Success(x: String) => client ! Write(ByteString(Response(requestId, x).serialize))
-        case Failure(_) => client ! Write(ByteString(Error(requestId, "UNAVAILABLE", "DOWN").serialize))
+        case Success(x: String) => client ! Write(ByteString(Response(requestId, x).serialize + '\n'))
+        case Failure(_) => client ! Write(ByteString(Error(requestId, "UNAVAILABLE", "DOWN").serialize + '\n'))
       }
   }
 
@@ -56,6 +66,9 @@ class ClientActor(gate: ActorRef, client: ActorRef) extends Actor with ActorLogg
   }
 
   def onCommand(cmd: String, args: String) = cmd match {
+    case "CLIENTS" => context.parent ? ListConnectedClients collect {
+      case clients: ConnectedClients => s"${UPDATE}CLIENTS:${clients.serialize}"
+    }
     case "CONSUMER" => gate ? Consumer collect {
       case response: Token => response.serialize
     }
