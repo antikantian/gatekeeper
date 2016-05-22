@@ -24,18 +24,17 @@ class BufferActor(client: ActorRef) extends Actor with ActorLogging {
     case bs: ByteString =>
       log.info("Received: " + bs.utf8String)
       byteBuffer ++= bs
-      readBuffer(Seq.empty[ByteString]).foreach(context.parent ! Packet(_))
+      readBuffer(List.empty[ByteString]).foreach(context.parent ! Packet(_))
   }
 
   @scala.annotation.tailrec
-  private def readBuffer(parsed: Seq[ByteString]): Seq[ByteString] = {
-    if (byteBuffer.contains('\n')) {
-      val pos = byteBuffer.indexOf('\n')
-      val chunk = byteBuffer.slice(0, pos)
-      val bs = new ByteStringBuilder()
-      bs.putBytes(chunk.toArray)
-      byteBuffer.remove(0, chunk.length + 1)
-      readBuffer(parsed :+ bs.result)
+  private def readBuffer(parsed: List[ByteString]): List[ByteString] = {
+    if (byteBuffer.contains('\n') && validHead.exists(byteBuffer.contains)) {
+      val start = byteBuffer.indexWhere(validHead.contains)
+      val end = byteBuffer.indexOf('\n', start)
+      val chunk = byteBuffer.slice(start, end).foldLeft(new ByteStringBuilder())((bs, byte) => bs += byte)
+      byteBuffer.trimStart(chunk.length + 1)
+      readBuffer(parsed :+ chunk.result)
     } else parsed
   }
 }
