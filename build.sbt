@@ -26,14 +26,9 @@ resolvers ++= Seq[Resolver](
 
 lazy val versions = new {
   val akka = "2.4.3"
-  val akkaKafka = "0.11-M2"
   val nscalatime = "2.12.0"
   val config = "1.3.0"
-  val scalalogging = "3.1.0"
-  val cassandra = "3.0.0"
   val redis = "1.6.0"
-  val scredis = "2.0.6"
-  val spray = "1.3.3"
 }
 
 libraryDependencies ++= Seq(
