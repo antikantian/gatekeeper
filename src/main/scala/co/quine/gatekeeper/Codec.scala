@@ -20,6 +20,7 @@ object Codec {
   val UPDATE = '+'
   val UUID = '#'
   val ERROR = '-'
+  val TICK = '~'
   val CONSUMERTOKEN = '&'
   val ACCESSTOKEN = '@'
   val BEARERTOKEN = '%'
@@ -224,15 +225,15 @@ object Codec {
   }
 
   implicit def string2resource(s: String): Resource = s match {
-    case "ULOOKUP" => UsersLookup
-    case "USHOW" => UsersShow
-    case "SLOOKUP" => StatusesLookup
-    case "SSHOW" => StatusesShow
-    case "SUSERTIMELINE" => StatusesUserTimeline
-    case "FRIDS" => FriendsIds
-    case "FRLIST" => FriendsList
-    case "FOIDS" => FollowersIds
-    case "FOLIST" => FollowersList
+    case ("ULOOKUP" | "/users/lookup.json") => UsersLookup
+    case ("USHOW" | "/users/show.json") => UsersShow
+    case ("SLOOKUP" | "/statuses/lookup.json") => StatusesLookup
+    case ("SSHOW" | "/statuses/show.json") => StatusesShow
+    case ("SUSERTIMELINE" | "/statuses/user_timeline.json") => StatusesUserTimeline
+    case ("FRIDS" | "/friends/ids.json") => FriendsIds
+    case ("FRLIST" | "/friends/list.json") => FriendsList
+    case ("FOIDS" | "/followers/ids.json") => FollowersIds
+    case ("FOLIST" | "/followers/list.json") => FollowersList
   }
 
 }

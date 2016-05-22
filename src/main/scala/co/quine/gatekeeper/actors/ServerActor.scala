@@ -2,7 +2,6 @@ package co.quine.gatekeeper.actors
 
 import akka.actor._
 import akka.io.{IO, Tcp}
-import akka.util.Helpers
 import java.net.InetSocketAddress
 import java.util.concurrent.atomic.AtomicLong
 import scala.collection.mutable
@@ -12,9 +11,9 @@ import co.quine.gatekeeper.config.Config
 object ServerActor {
   case class ClientDisconnected()
 
-  val tempNumber = new AtomicLong
+  val tempNumber = new AtomicLong(1)
 
-  def tempName = Helpers.base64(tempNumber.getAndIncrement)
+  def tempName = tempNumber.getAndIncrement
 
   def props(gate: ActorRef): Props = Props(new ServerActor(gate))
 }
@@ -32,26 +31,28 @@ class ServerActor(gate: ActorRef) extends Actor with ActorLogging {
 
   def receive = {
     case Tcp.Connected(remote, local) =>
-      connectedClients.add(startClient(sender, remote))
+      startClient(sender, remote)
     case Tcp.Bound(localAddress) =>
       log.info(s"Server bound to $localAddress")
     case Tcp.CommandFailed(cmd) =>
       log.info(s"Command failed: $cmd")
-    case Terminated(actor) => connectedClients.remove(actor)
+    case Terminated(actor) => removeClient(actor)
+    case ListConnectedClients => sender() ! ConnectedClients(connectedClients.toSeq)
   }
 
   def startClient(sender: ActorRef, remoteAddress: InetSocketAddress): ActorRef = {
-    val clientId = s"client-${remoteAddress.getHostString}-${ServerActor.tempName}"
+    val clientId = s"client-${remoteAddress.getHostString}-" + ServerActor.tempName
     val clientActor = context.actorOf(ClientActor.props(gate, sender), clientId)
     context.watch(clientActor)
     sender ! Tcp.Register(clientActor)
-    log.info(s"${remoteAddress.getHostString} connected")
+    connectedClients.add(clientActor)
+    log.info(s"Client ($clientId): connected")
     clientActor
   }
 
   def removeClient(client: ActorRef) = {
     connectedClients.remove(client)
-    log.info(s"${client.path.name} disconnected")
+    log.info(s"Client (${client.path.name}) disconnected")
   }
 }
 
